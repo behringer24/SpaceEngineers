@@ -24,7 +24,10 @@ namespace ProgrammableBlocks.AttackDrone
         private const int verticalAttackOffset = 5;
         private const int attackTimeout = 30;
 
+        private const string droneShortName = "AD1";
+
         private Vector3D origin = new Vector3D();
+        private Vector3D lastEnemyPos = new Vector3D();
         private List<Vector3D> waypoints = new List<Vector3D>();
         private string mode = "";
         private int timer = 0;
@@ -47,7 +50,7 @@ namespace ProgrammableBlocks.AttackDrone
             if (concatenate)
                 antenna.SetCustomName(antenna.CustomName + " " + text);
             else
-                antenna.SetCustomName(text);
+                antenna.SetCustomName(droneShortName+"-"+text);
         }
 
         private void sendMessage(string message)
@@ -60,6 +63,16 @@ namespace ProgrammableBlocks.AttackDrone
         {
             var upVector = remoteControl.WorldMatrix.Up;
             return enemyPosition + upVector * verticalAttackOffset;
+        }
+
+        private string vector3DtoString(Vector3D input)
+        {
+            return $"{input.X}/{input.Y}/{input.Z}";
+        }
+
+        private Vector3D stringToVector3D(string input)
+        {
+            return new Vector3D();
         }
 
         public void Main(string argument, UpdateType updateType)
@@ -88,6 +101,14 @@ namespace ProgrammableBlocks.AttackDrone
                     sendMessage("Returning");
                     break;
                 case "start":
+                    if (origin.IsZero())
+                    {
+                        origin = remoteControl.GetPosition();
+                    }
+                    if (waypoints.Count == 0)
+                    {
+                        waypoints.Add(remoteControl.GetPosition());
+                    }
                     Runtime.UpdateFrequency = UpdateFrequency.Update100;
                     turret.ApplyAction("OnOff_On");
                     turret.ApplyAction("EnableIdleMovement_On");
@@ -112,18 +133,33 @@ namespace ProgrammableBlocks.AttackDrone
                 case "addwaypoint":
                     waypoints.Add(remoteControl.GetPosition());
                     mode = "";
-                    Echo($"Waypoint added (#{waypoints.Count}");
+                    sendMessage($"Waypoint added (#{waypoints.Count})");
                     break;
                 case "clearwaypoints":
                     waypoints.Clear();
+                    remoteControl.ClearWaypoints();
                     mode = "stop";
+                    break;
+                case "learnwaypoints":
+                    List<MyWaypointInfo> currentWaypoints = new List<MyWaypointInfo>();
+                    waypoints.Clear();
+                    remoteControl.GetWaypointInfo(currentWaypoints);
+                    foreach(MyWaypointInfo waypointInfo in currentWaypoints)
+                    {
+                        waypoints.Add(waypointInfo.Coords);
+                    }
+                    remoteControl.ClearWaypoints();
+                    sendMessage($"Waypoints transferred (#{waypoints.Count})");
+                    mode = "";
                     break;
                 case "patrol":
                     if (turret.HasTarget)
                     {
+                        Vector3D enemyPos = turret.GetTargetedEntity().Position;
+                        lastEnemyPos = enemyPos;
                         remoteControl.SetAutoPilotEnabled(false);
                         remoteControl.ClearWaypoints();
-                        remoteControl.AddWaypoint(new MyWaypointInfo("Enemy", enemyRelPos(turret.GetTargetedEntity().Position, remoteControl)));
+                        remoteControl.AddWaypoint(new MyWaypointInfo("Enemy", enemyRelPos(enemyPos, remoteControl)));
                         remoteControl.FlightMode = FlightMode.OneWay;
                         remoteControl.SetAutoPilotEnabled(true);                        
                         mode = "attack";
@@ -142,14 +178,20 @@ namespace ProgrammableBlocks.AttackDrone
                         }
                         else
                         {
-                            sendMessage($"Searching Enemy ({timer})");
+                            sendMessage($"Searching Enemy ({attackTimeout - timer} sec)");
                         }
                     }
                     else
                     {
                         timer = 0;
-                        remoteControl.AddWaypoint(new MyWaypointInfo("Enemy", enemyRelPos(turret.GetTargetedEntity().Position, remoteControl)));
-                        sendMessage($"Following target ({turret.GetTargetedEntity().Position})");
+                        Vector3D enemyPos = turret.GetTargetedEntity().Position;
+                        if (lastEnemyPos != enemyPos)
+                        {
+                            remoteControl.AddWaypoint(new MyWaypointInfo("Enemy", enemyRelPos(turret.GetTargetedEntity().Position, remoteControl)));
+                            sendMessage($"Following target ({turret.GetTargetedEntity().Position})");
+                            remoteControl.SetAutoPilotEnabled(true);
+                            lastEnemyPos = enemyPos;
+                        }                        
                     }
                     break;
             }
