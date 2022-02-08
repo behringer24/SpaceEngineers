@@ -18,6 +18,7 @@ namespace ProgrammableBlocks.AttackDrone
     internal class Program : MyGridProgram
     {
         // --- Copy from here -------------
+
         private const string remoteControlName = "Remote Control";
         private const string turretName = "Autocannon Turret";
 
@@ -35,11 +36,26 @@ namespace ProgrammableBlocks.AttackDrone
         public Program()
         {
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
+            if (Storage.Length > 0)
+            {
+                string[] parts = Storage.Split(';');
+                mode = parts[0];
+                origin = stringToVector3D(parts[1]);
+                for (int i = 2; i < parts.Length-1; i++)
+                {
+                    waypoints.Add(stringToVector3D(parts[i]));
+                }
+            }
         }
 
         public void Save()
         {
-
+            Storage = mode + ";";
+            Storage += vector3DtoString(origin) + ";";
+            foreach (var waypoint in waypoints)
+            {
+                Storage += vector3DtoString(waypoint) + ";";
+            }
         }
 
         private void debug(string text, bool concatenate)
@@ -72,7 +88,8 @@ namespace ProgrammableBlocks.AttackDrone
 
         private Vector3D stringToVector3D(string input)
         {
-            return new Vector3D();
+            string[] parts = input.Split('/');
+            return new Vector3D(Convert.ToDouble(parts[0]), Convert.ToDouble(parts[1]), Convert.ToDouble(parts[2]));            
         }
 
         public void Main(string argument, UpdateType updateType)
@@ -191,7 +208,7 @@ namespace ProgrammableBlocks.AttackDrone
                             sendMessage($"Following target ({turret.GetTargetedEntity().Position})");
                             remoteControl.SetAutoPilotEnabled(true);
                             lastEnemyPos = enemyPos;
-                        }                        
+                        }
                     }
                     break;
             }
